@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { format } from 'date-fns'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { ShieldAlert } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useSchool } from '@/lib/school'
 import { supabase } from '@/lib/supabase'
+import { logSuperAdminAction } from '@/lib/superAdminAudit'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -110,6 +112,31 @@ export default function SettingsPage() {
       return data ?? []
     },
   })
+
+  // Detect cross-school super-admin viewing: super admin AND not a member of this school's admins.
+  const { data: isSuperAdmin = false } = useQuery({
+    queryKey: ['is-super-admin', user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data } = await supabase.rpc('is_super_admin')
+      return !!data
+    },
+  })
+  const isSchoolMember = !!user && admins.some((a) => a.user_id === user.id)
+  const showSuperAdminBanner = isSuperAdmin && !isSchoolMember && admins.length > 0
+
+  // One audit row per session per cross-school view.
+  const auditedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!showSuperAdminBanner || !activeSchool) return
+    if (auditedRef.current === activeSchool.id) return
+    auditedRef.current = activeSchool.id
+    void logSuperAdminAction('view_school_admins', {
+      targetSchoolId: activeSchool.id,
+      targetSchoolName: activeSchool.name,
+      detail: { admin_count: admins.length },
+    })
+  }, [showSuperAdminBanner, activeSchool, admins.length])
 
   const removeAdmin = useMutation({
     mutationFn: async (adminId: string) => {
@@ -261,6 +288,17 @@ export default function SettingsPage() {
           <CardTitle>Admins</CardTitle>
         </CardHeader>
         <CardContent>
+          {showSuperAdminBanner && (
+            <div
+              role="alert"
+              className="mb-4 flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+            >
+              <ShieldAlert className="mt-0.5 h-5 w-5 flex-shrink-0" />
+              <span>
+                You are viewing this school's admin list as a super admin. The admins listed here have not consented to operators seeing their email addresses. Use this view only when investigating a support issue. Every view is logged.
+              </span>
+            </div>
+          )}
           <div className="space-y-2 mb-4">
             {admins.map((a) => (
               <div key={a.id} className="flex items-center justify-between border rounded-md px-3 py-2">

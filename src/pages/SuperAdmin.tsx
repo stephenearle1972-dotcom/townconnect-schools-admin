@@ -1,9 +1,11 @@
+import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, formatDistanceToNow } from 'date-fns'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import { logSuperAdminAction } from '@/lib/superAdminAudit'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -72,14 +74,20 @@ export default function SuperAdminPage() {
   })
 
   const markPaid = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (school: SchoolWithAdmins) => {
       const paidUntil = new Date()
       paidUntil.setFullYear(paidUntil.getFullYear() + 1)
+      const previousStatus = school.subscription_status
       const { error } = await supabase
         .from('schools')
         .update({ subscription_status: 'active', paid_until: paidUntil.toISOString() })
-        .eq('id', id)
+        .eq('id', school.id)
       if (error) throw error
+      void logSuperAdminAction('mark_as_paid', {
+        targetSchoolId: school.id,
+        targetSchoolName: school.name,
+        detail: { previous_status: previousStatus, new_status: 'active' },
+      })
     },
     onSuccess: () => {
       toast.success('Marked as paid for 1 year')
@@ -89,12 +97,18 @@ export default function SuperAdminPage() {
   })
 
   const suspend = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (school: SchoolWithAdmins) => {
+      const previousStatus = school.subscription_status
       const { error } = await supabase
         .from('schools')
         .update({ subscription_status: 'read_only' })
-        .eq('id', id)
+        .eq('id', school.id)
       if (error) throw error
+      void logSuperAdminAction('suspend', {
+        targetSchoolId: school.id,
+        targetSchoolName: school.name,
+        detail: { previous_status: previousStatus, new_status: 'read_only' },
+      })
     },
     onSuccess: () => {
       toast.success('Suspended')
@@ -103,10 +117,25 @@ export default function SuperAdminPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  const openAsAdmin = (id: string) => {
-    localStorage.setItem('tc_active_school', id)
+  const openAsAdmin = (school: SchoolWithAdmins) => {
+    void logSuperAdminAction('open_as_admin', {
+      targetSchoolId: school.id,
+      targetSchoolName: school.name,
+    })
+    localStorage.setItem('tc_active_school', school.id)
     navigate('/dashboard')
   }
+
+  // Log a single 'view_school_admins' event per session per page render — not per row.
+  // Auditing every individual row hover/render would flood the log without adding value.
+  const loggedRef = useRef(false)
+  useEffect(() => {
+    if (!authorised || schools.length === 0 || loggedRef.current) return
+    loggedRef.current = true
+    void logSuperAdminAction('view_school_admins', {
+      detail: { school_count: schools.length },
+    })
+  }, [authorised, schools.length])
 
   if (!authorised) {
     return (
@@ -202,7 +231,7 @@ export default function SuperAdminPage() {
                         {format(new Date(s.created_at), 'd MMM yyyy')}
                       </TableCell>
                       <TableCell className="text-right space-x-2">
-                        <Button size="sm" variant="outline" onClick={() => openAsAdmin(s.id)}>
+                        <Button size="sm" variant="outline" onClick={() => openAsAdmin(s)}>
                           Open
                         </Button>
                         <AlertDialog>
@@ -220,7 +249,7 @@ export default function SuperAdminPage() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => markPaid.mutate(s.id)}>
+                              <AlertDialogAction onClick={() => markPaid.mutate(s)}>
                                 Confirm
                               </AlertDialogAction>
                             </AlertDialogFooter>
@@ -241,7 +270,7 @@ export default function SuperAdminPage() {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => suspend.mutate(s.id)}>
+                              <AlertDialogAction onClick={() => suspend.mutate(s)}>
                                 Confirm
                               </AlertDialogAction>
                             </AlertDialogFooter>
