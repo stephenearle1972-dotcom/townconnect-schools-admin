@@ -493,17 +493,14 @@ export type Database = {
       super_admins: {
         Row: {
           created_at: string | null
-          email: string
           user_id: string
         }
         Insert: {
           created_at?: string | null
-          email: string
           user_id: string
         }
         Update: {
           created_at?: string | null
-          email?: string
           user_id?: string
         }
         Relationships: []
@@ -566,7 +563,14 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_super_admins: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       is_super_admin: { Args: never; Returns: boolean }
