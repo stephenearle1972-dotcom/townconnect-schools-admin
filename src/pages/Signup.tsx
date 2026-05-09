@@ -31,13 +31,25 @@ export default function SignupPage() {
   })
 
   const onSubmit = async (values: FormValues) => {
+    // Same-device fast path
     localStorage.setItem('tc_pending_signup', JSON.stringify(values))
     const { error } = await supabase.auth.signInWithOtp({
       email: values.contactEmail,
       options: {
         emailRedirectTo: window.location.origin + '/auth/callback',
         shouldCreateUser: true,
-        data: { full_name: values.principalName },
+        // Persist sign-up details to auth.users.user_metadata so the magic link
+        // works even when the user clicks it on a different device/browser.
+        data: {
+          full_name: values.principalName,
+          pending_school: {
+            name: values.schoolName,
+            principal_name: values.principalName,
+            contact_email: values.contactEmail,
+            contact_phone: values.contactPhone,
+            address: values.address ?? null,
+          },
+        },
       },
     })
     if (error) {

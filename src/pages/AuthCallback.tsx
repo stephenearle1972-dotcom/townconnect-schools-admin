@@ -74,17 +74,49 @@ export default function AuthCallbackPage() {
           return
         }
 
-        const raw = localStorage.getItem('tc_pending_signup')
-        let pending: SchoolDetails | null = null
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw)
-            if (parsed && typeof parsed.schoolName === 'string') {
-              pending = parsed
+        // Priority 1: user_metadata.pending_school — survives across devices/browsers.
+        const metaPending = session.user.user_metadata?.pending_school as
+          | {
+              name?: unknown
+              principal_name?: unknown
+              contact_email?: unknown
+              contact_phone?: unknown
+              address?: unknown
             }
-          } catch {
-            // Corrupt entry — drop it
-            localStorage.removeItem('tc_pending_signup')
+          | null
+          | undefined
+        let pending: SchoolDetails | null = null
+        if (
+          metaPending &&
+          typeof metaPending.name === 'string' &&
+          typeof metaPending.principal_name === 'string' &&
+          typeof metaPending.contact_email === 'string' &&
+          typeof metaPending.contact_phone === 'string'
+        ) {
+          pending = {
+            schoolName: metaPending.name,
+            principalName: metaPending.principal_name,
+            contactEmail: metaPending.contact_email,
+            contactPhone: metaPending.contact_phone,
+            address:
+              typeof metaPending.address === 'string' || metaPending.address === null
+                ? (metaPending.address as string | null)
+                : null,
+          }
+        }
+
+        // Priority 2: localStorage — fast same-device fallback.
+        if (!pending) {
+          const raw = localStorage.getItem('tc_pending_signup')
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw)
+              if (parsed && typeof parsed.schoolName === 'string') {
+                pending = parsed
+              }
+            } catch {
+              localStorage.removeItem('tc_pending_signup')
+            }
           }
         }
 
@@ -104,8 +136,15 @@ export default function AuthCallbackPage() {
           }
 
           const { schoolId } = await createSchoolForUser(pending, session.user)
+          // Clear both stores so a future sign-in (where the user already has a
+          // school) doesn't trigger a duplicate-insert attempt.
           localStorage.removeItem('tc_pending_signup')
           localStorage.setItem('tc_active_school', schoolId)
+          if (metaPending) {
+            await supabase.auth.updateUser({ data: { pending_school: null } }).catch(() => {
+              // Non-fatal — clearing metadata is best-effort.
+            })
+          }
           navigate('/dashboard', { replace: true })
           return
         }

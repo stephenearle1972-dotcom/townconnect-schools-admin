@@ -53,7 +53,11 @@ function TrialBanner() {
 
   if (status === 'read_only' || status === 'cancelled' || status === 'past_due') {
     return (
-      <div className="border-b border-destructive bg-destructive/10 px-6 py-3 text-sm">
+      <div
+        data-testid="trial-banner"
+        data-trial-state="suspended"
+        className="border-b border-destructive bg-destructive/10 px-6 py-3 text-sm"
+      >
         <strong className="text-destructive">Account suspended.</strong>{' '}
         <span className="text-destructive/80">Read-only mode.</span>{' '}
         <a className="ml-2 underline text-navy" href="mailto:hello@townconnect.co.za">
@@ -66,7 +70,11 @@ function TrialBanner() {
   if (status === 'trial' && trialEnd) {
     if (trialEnd < now) {
       return (
-        <div className="border-b border-destructive bg-destructive/10 px-6 py-3 text-sm">
+        <div
+          data-testid="trial-banner"
+          data-trial-state="expired"
+          className="border-b border-destructive bg-destructive/10 px-6 py-3 text-sm"
+        >
           <strong className="text-destructive">Your trial has ended.</strong>{' '}
           <span className="text-destructive/80">Your bot is paused.</span>{' '}
           <a className="ml-2 underline text-navy" href="mailto:hello@townconnect.co.za?subject=Reactivate%20my%20school%20admin">
@@ -77,7 +85,12 @@ function TrialBanner() {
     }
     const daysLeft = Math.max(0, differenceInDays(trialEnd, now))
     return (
-      <div className="border-b border-gold bg-gold/10 px-6 py-3 text-sm flex items-center justify-between gap-4 flex-wrap">
+      <div
+        data-testid="trial-banner"
+        data-trial-state="trial"
+        data-trial-days-left={daysLeft}
+        className="border-b border-gold bg-gold/10 px-6 py-3 text-sm flex items-center justify-between gap-4 flex-wrap"
+      >
         <span>
           <strong className="text-navy">Free trial — {daysLeft} day{daysLeft === 1 ? '' : 's'} left.</strong>{' '}
           <span className="text-navy/70">Upgrade to keep your bot live.</span>
@@ -91,7 +104,11 @@ function TrialBanner() {
 
   if (status === 'active' && activeSchool.paid_until) {
     return (
-      <div className="border-b bg-teal/10 px-6 py-2 text-xs text-teal">
+      <div
+        data-testid="trial-banner"
+        data-trial-state="paid"
+        className="border-b bg-teal/10 px-6 py-2 text-xs text-teal"
+      >
         Paid until {format(new Date(activeSchool.paid_until), 'd MMMM yyyy')}
       </div>
     )
