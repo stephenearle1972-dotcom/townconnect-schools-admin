@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -492,6 +490,24 @@ export type Database = {
           },
         ]
       }
+      super_admins: {
+        Row: {
+          created_at: string | null
+          email: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       teachers: {
         Row: {
           bio: string | null
@@ -553,6 +569,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      is_super_admin: { Args: never; Returns: boolean }
       user_school_ids: { Args: never; Returns: string[] }
     }
     Enums: {
