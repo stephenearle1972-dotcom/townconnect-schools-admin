@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom'
 import {
   Calendar,
   Bell,
@@ -126,7 +126,7 @@ function SchoolSelector() {
 
 export default function DashboardLayout() {
   const { user, signOut } = useAuth()
-  const { activeSchool, isLoading } = useSchool()
+  const { schools, activeSchool, isLoading } = useSchool()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -136,13 +136,17 @@ export default function DashboardLayout() {
     return <div className="p-8 text-muted-foreground">Loading your school…</div>
   }
 
+  // Authenticated but no school: route to /complete-signup as the proper finish-setup flow.
+  if (!activeSchool && schools.length === 0) {
+    return <Navigate to="/complete-signup" replace />
+  }
+
   if (!activeSchool) {
+    // Schools exist but none active — transient state. Brief fallback with sign-out escape hatch.
     return (
       <div className="min-h-screen flex items-center justify-center p-6">
         <div className="max-w-md text-center space-y-4">
-          <h1 className="text-2xl font-bold text-navy">No school yet</h1>
-          <p className="text-muted-foreground">Your account isn't linked to a school. Sign up first.</p>
-          <Button onClick={() => navigate('/signup')}>Sign up</Button>
+          <h1 className="text-2xl font-bold text-navy">Loading school…</h1>
           <Button variant="outline" onClick={signOut} className="ml-2">
             Sign out
           </Button>

@@ -5,6 +5,7 @@ import LandingPage from './pages/Landing'
 import SignupPage from './pages/Signup'
 import LoginPage from './pages/Login'
 import AuthCallbackPage from './pages/AuthCallback'
+import CompleteSignupPage from './pages/CompleteSignup'
 import DashboardLayout from './layouts/DashboardLayout'
 import OverviewPage from './pages/dashboard/Overview'
 import TeachersPage from './pages/dashboard/Teachers'
@@ -33,6 +34,14 @@ export default function App() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route
+          path="/complete-signup"
+          element={
+            <ProtectedRoute>
+              <CompleteSignupPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/super"
           element={
