@@ -167,18 +167,16 @@ export default function FilesPage() {
 
   const reprocess = useMutation({
     mutationFn: async (file: FileRow) => {
-      const res = await fetch(EXTRACT_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_id: file.id }),
-      })
-      if (!res.ok) throw new Error(`Extract endpoint returned ${res.status}`)
-      // Optimistically flip to processing so the badge changes immediately —
-      // the realtime subscription will catch the actual processed/failed state.
+      // Flip to "processing" first so the badge changes immediately, THEN fire
+      // the extract function. The function itself rewrites status to processing
+      // at the top and processed/failed at the end — the realtime subscription
+      // surfaces the final state. Doing the optimistic write *after* the fetch
+      // would race the function's terminal write and could leave the row stuck.
       await supabase
         .from('files')
         .update({ extraction_status: 'processing', extraction_error: null })
         .eq('id', file.id)
+      triggerExtraction(file.id)
     },
     onSuccess: () => {
       toast.success('Re-processing started')
