@@ -174,12 +174,17 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           description: string | null
+          extracted_text: string | null
+          extraction_error: string | null
+          extraction_status: string | null
           filename: string
           id: string
           mime_type: string | null
+          processed_at: string | null
           school_id: string
           size_bytes: number | null
           storage_path: string
+          summary: string | null
           uploaded_by: string | null
         }
         Insert: {
@@ -187,12 +192,17 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           description?: string | null
+          extracted_text?: string | null
+          extraction_error?: string | null
+          extraction_status?: string | null
           filename: string
           id?: string
           mime_type?: string | null
+          processed_at?: string | null
           school_id: string
           size_bytes?: number | null
           storage_path: string
+          summary?: string | null
           uploaded_by?: string | null
         }
         Update: {
@@ -200,12 +210,17 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           description?: string | null
+          extracted_text?: string | null
+          extraction_error?: string | null
+          extraction_status?: string | null
           filename?: string
           id?: string
           mime_type?: string | null
+          processed_at?: string | null
           school_id?: string
           size_bytes?: number | null
           storage_path?: string
+          summary?: string | null
           uploaded_by?: string | null
         }
         Relationships: [

@@ -1,6 +1,6 @@
-import { useState, useRef, DragEvent } from 'react'
+import { useState, useRef, useEffect, DragEvent } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Upload, Trash2, Copy, FileIcon, Image as ImageIcon } from 'lucide-react'
+import { Upload, Trash2, Copy, FileIcon, Image as ImageIcon, RefreshCw, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -34,11 +34,72 @@ type FileRow = Database['public']['Tables']['files']['Row']
 
 const CATEGORIES = ['newsletters', 'term-calendars', 'fee-schedules', 'forms', 'other']
 
+const EXTRACT_ENDPOINT = 'https://schools.townconnect.co.za/.netlify/functions/extract-file-text'
+
 const fmtBytes = (b: number | null) => {
   if (!b) return '—'
   if (b < 1024) return `${b} B`
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
   return `${(b / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function triggerExtraction(fileId: string) {
+  void fetch(EXTRACT_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file_id: fileId }),
+  }).catch(err => console.error('Failed to trigger extraction:', err))
+}
+
+function ExtractionBadge({ file }: { file: FileRow }) {
+  const status = file.extraction_status ?? 'pending'
+  switch (status) {
+    case 'pending':
+      return (
+        <Badge variant="secondary" className="bg-muted text-muted-foreground" title="Queued for extraction">
+          Processing soon
+        </Badge>
+      )
+    case 'processing':
+      return (
+        <Badge variant="secondary" className="bg-blue-100 text-blue-800" title="Extraction in progress">
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+          Processing
+        </Badge>
+      )
+    case 'processed':
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-green-100 text-green-800"
+          title="Bot can answer questions from this file"
+        >
+          Ready
+        </Badge>
+      )
+    case 'failed':
+      return (
+        <Badge
+          variant="destructive"
+          className="cursor-help"
+          title={file.extraction_error || 'Extraction failed'}
+        >
+          Extraction failed
+        </Badge>
+      )
+    case 'unsupported':
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-muted text-muted-foreground"
+          title="PDF / Word / text only — image files can't be read"
+        >
+          Not text-readable
+        </Badge>
+      )
+    default:
+      return <Badge variant="secondary">{status}</Badge>
+  }
 }
 
 export default function FilesPage() {
@@ -80,16 +141,21 @@ export default function FilesPage() {
         .from(bucket)
         .upload(path, file, { contentType: file.type, upsert: false })
       if (upErr) throw upErr
-      const { error: dbErr } = await supabase.from('files').insert({
-        school_id: activeSchool.id,
-        category,
-        filename: file.name,
-        storage_path: `${bucket}/${path}`,
-        mime_type: file.type,
-        size_bytes: file.size,
-        uploaded_by: user?.id ?? null,
-      })
+      const { data: inserted, error: dbErr } = await supabase
+        .from('files')
+        .insert({
+          school_id: activeSchool.id,
+          category,
+          filename: file.name,
+          storage_path: `${bucket}/${path}`,
+          mime_type: file.type,
+          size_bytes: file.size,
+          uploaded_by: user?.id ?? null,
+        })
+        .select('id')
+        .single()
       if (dbErr) throw dbErr
+      if (inserted?.id) triggerExtraction(inserted.id)
     },
     onSuccess: () => {
       toast.success('File uploaded')
@@ -98,6 +164,45 @@ export default function FilesPage() {
     },
     onError: (err: Error) => toast.error(err.message),
   })
+
+  const reprocess = useMutation({
+    mutationFn: async (file: FileRow) => {
+      const res = await fetch(EXTRACT_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file_id: file.id }),
+      })
+      if (!res.ok) throw new Error(`Extract endpoint returned ${res.status}`)
+      // Optimistically flip to processing so the badge changes immediately —
+      // the realtime subscription will catch the actual processed/failed state.
+      await supabase
+        .from('files')
+        .update({ extraction_status: 'processing', extraction_error: null })
+        .eq('id', file.id)
+    },
+    onSuccess: () => {
+      toast.success('Re-processing started')
+      queryClient.invalidateQueries({ queryKey: ['files', activeSchool?.id] })
+    },
+    onError: (err: Error) => toast.error(`Re-process failed: ${err.message}`),
+  })
+
+  useEffect(() => {
+    if (!activeSchool?.id) return
+    const channel = supabase
+      .channel(`files-status-${activeSchool.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'files', filter: `school_id=eq.${activeSchool.id}` },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['files', activeSchool.id] })
+        }
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [activeSchool?.id, queryClient])
 
   const remove = useMutation({
     mutationFn: async (file: FileRow) => {
@@ -228,10 +333,22 @@ export default function FilesPage() {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
+                          <ExtractionBadge file={f} />
                           <Badge variant="secondary">{f.mime_type ?? 'file'}</Badge>
                           <Button size="sm" variant="ghost" onClick={() => copyLink(f)}>
                             <Copy className="mr-1 h-3 w-3" /> Copy bot link
                           </Button>
+                          {f.extraction_status !== 'unsupported' && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => reprocess.mutate(f)}
+                              disabled={reprocess.isPending}
+                              title="Re-process for the bot"
+                            >
+                              <RefreshCw className={`h-4 w-4 ${reprocess.isPending ? 'animate-spin' : ''}`} />
+                            </Button>
+                          )}
                           <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setConfirmDelete(f)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
